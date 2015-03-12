@@ -1219,7 +1219,7 @@ bool ClangIndexer::diagnose()
                 unsigned expLine, expColumn, spellingLine, spellingColumn;
                 clang_getExpansionLocation(diagLoc, &expFile, &expLine, &expColumn, 0);
                 clang_getSpellingLocation(diagLoc, &spellingFile, &spellingLine, &spellingColumn, 0);
-                headerError = (expLine == spellingLine && expColumn == spellingColumn && clang_File_isEqual(expFile, spellingFile));
+                headerError = (expLine == spellingLine && expColumn == spellingColumn && clang_getFileUniqueID(expFile) == clang_getFileUniqueID(spellingFile));
                 // error() << headerError << cursor;
             }
             if (headerError) {
