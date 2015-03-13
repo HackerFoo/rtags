@@ -405,9 +405,12 @@ void CompletionThread::printCompletions(const List<Completions::Candidate> &comp
         // Does this need to be called in the main thread?
         String out;
         out.reserve(16384);
-        if (doLog)
+        if (doLog) {
             log(RTags::CompilationErrorXml, "<?xml version=\"1.0\" encoding=\"utf-8\"?><completions location=\"%s\"><![CDATA[",
                 request->location.key().constData());
+        } else {
+
+        }
 
         if (request->flags & Elisp)
             out += "'(";

@@ -1241,42 +1241,110 @@ References to references will be treated as references to the referenced symbol"
           (errors-warnings (format "RTags: %s " errors-warnings))
           (t ""))))
 
+(defvar rtags-error-warning-count nil)
+(make-variable-buffer-local 'rtags-error-warning-count)
+(defun rtags-parse-overlay-node (node)
+  (when (listp node)
+    (let* ((name (car node))
+           (attrs (cadr node))
+           (body (cddr node))
+           (errors 0)
+           (warnings 0)
+           (buf)
+           (filename (cdr (assq 'name attrs))))
+      (when (eq name 'file)
+        (rtags-overlays-remove filename)
+        ;; (message "removing overlays %s" filename)
+        (save-excursion
+          (goto-char (point-min))
+          (flush-lines (concat filename ":")))
+        (dolist (it body)
+          (let ((result (rtags-parse-overlay-error-node it filename)))
+            (cond ((eq 'error (car result)) (incf errors))
+                  ((eq 'warning (car result)) (incf warnings))
+                  (t))
+            (setq buf (cdr result)))) ;; no need to set this every time
+        (let ((buf (rtags-really-find-buffer filename)))
+          (if buf
+              (with-current-buffer buf
+                (setq rtags-error-warning-count (cons errors warnings)))))))))
+
+(defun rtags-parse-check-style (checkstyle)
+  (while checkstyle
+    (let* ((file (caar checkstyle))
+           (buf (rtags-really-find-buffer file)))
+      (rtags-overlays-remove file)
+      (setq checkstyle (cdr checkstyle)))))
+
 (defun rtags-parse-diagnostics ()
-  (let ((doc (rtags-parse-xml)) body)
-    (when doc
-      ;;(message "GOT XML %s" output)
-      (cond ((eq (car doc) 'checkstyle)
-             (when rtags-spellcheck-enabled
-               (setq body (cddr doc))
-               (while body
-                 (with-current-buffer "*RTags Diagnostics*"
-                   (setq buffer-read-only nil)
-                   (rtags-parse-overlay-node (car body))
-                   (setq buffer-read-only t)
-                   (setq body (cdr body))))))
-            ((eq (car doc) 'completions)
-             (when rtags-completions-enabled
-               ;; (message "Got completions [%s]" body)
-               (setq body (car (cddr doc)))
-               (setq rtags-last-completions
-                     (cons (cdar (cadr doc)) ;; location attribute
-                           (list (eval (read body)))))
-               ;; run hook where last completion request took place
-               (with-current-buffer (car rtags-last-completion-position)
-                 (run-hooks 'rtags-completions-hook))))
-            ((eq (car doc) 'progress)
-             (setq body (cadr doc))
-             (while body
-               (cond ((eq (caar body) 'index)
-                      ;; (message "Got index [%s]" (cdar body))
-                      (setq rtags-last-index (string-to-number (cdar body))))
-                     ((eq (caar body) 'total)
-                      (setq rtags-last-total (string-to-number (cdar body))))
-                     (t (message "Unexpected element %s" (caar body))))
-               (setq body (cdr body))))
-            ;;             (message "RTags: %s/%s (%s%%)" index total)))
-            (t (message "Unexpected root element %s" (car doc))))
-      (run-hooks 'rtags-diagnostics-hook))))
+  (save-excursion
+    (goto-char (point-min))
+    (let ((last (point)))
+      (while (search-forward "\n" (point-max) t)
+        (let ((data (save-restriction
+                      (narrow-to-region last (1- (point)))
+                      (save-excursion
+                        (goto-char (point-min))
+                        (message "%d-%d (%s)" (point-min) (point-max) (buffer-substring-no-properties (point-min) (point-max)))
+                        (eval (read (current-buffer)))))))
+          (cond ((eq (car data) 'checkstyle)
+                 (rtags-parse-check-style (cdr data)))
+                ((eq (car data) 'progress)
+                 (setq rtags-last-index (nth 2 data)
+                       rtags-last-total (nth 3 data)))
+                ((eq (car data) 'completions)))
+          (forward-char 1)
+          (setq last (point)))
+        (kill-region (point-min) last)))) ;; ### This should be delete-region
+  (run-hooks 'rtags-diagnostics-hook))
+
+
+  ;;         ;; narrow to one xml result (incase multiple results come in together)
+  ;;          (narrow-to-region (point-min) endpos)
+  ;;          ;; trim any whitespace from the beginning of the region
+  ;;          ;; otherwise `libxml-parse-xml-region' might fail
+  ;;          (rtags-trim-whitespace)
+  ;;          ;; now try to parse the xml
+  ;;          (rtags-parse-diagnostics)
+  ;;          ;; this region is done - remove it and continue processing
+  ;;          (delete-region (point-min) (point-max))
+  ;;          (widen))))))
+
+  ;; (let ((doc (rtags-parse-xml)) body)
+  ;;   (when doc
+  ;;     ;;(message "GOT XML %s" output)
+  ;;     (cond ((eq (car doc) 'checkstyle)
+  ;;            (when rtags-spellcheck-enabled
+  ;;              (setq body (cddr doc))
+  ;;              (while body
+  ;;                (with-current-buffer "*RTags Diagnostics*"
+  ;;                  (setq buffer-read-only nil)
+  ;;                  (rtags-parse-overlay-node (car body))
+  ;;                  (setq buffer-read-only t)
+  ;;                  (setq body (cdr body))))))
+  ;;           ((eq (car doc) 'completions)
+  ;;            (when rtags-completions-enabled
+  ;;              ;; (message "Got completions [%s]" body)
+  ;;              (setq body (car (cddr doc)))
+  ;;              (setq rtags-last-completions
+  ;;                    (cons (cdar (cadr doc)) ;; location attribute
+  ;;                          (list (eval (read body)))))
+  ;;              ;; run hook where last completion request took place
+  ;;              (with-current-buffer (car rtags-last-completion-position)
+  ;;                (run-hooks 'rtags-completions-hook))))
+  ;;           ((eq (car doc) 'progress)
+  ;;            (setq body (cadr doc))
+  ;;            (while body
+  ;;              (cond ((eq (caar body) 'index)
+  ;;                     ;; (message "Got index [%s]" (cdar body))
+  ;;                     (setq rtags-last-index (string-to-number (cdar body))))
+  ;;                    ((eq (caar body) 'total)
+  ;;                     (setq rtags-last-total (string-to-number (cdar body))))
+  ;;                    (t (message "Unexpected element %s" (caar body))))
+  ;;              (setq body (cdr body))))
+  ;;           ;;             (message "RTags: %s/%s (%s%%)" index total)))
+  ;;           (t (message "Unexpected root element %s" (car doc))))
+  ;;     (run-hooks 'rtags-diagnostics-hook))))
 
 (defun rtags-check-overlay (overlay)
   (if (and (not (active-minibuffer-window)) (not cursor-in-echo-area))
@@ -1410,39 +1478,25 @@ References to references will be treated as references to the referenced symbol"
         (setq buffer-read-only t))))
   (rtags-clear-all-diagnostics-overlays))
 
-(defun rtags-trim-whitespace ()
-  "Trim initial whitespace from the *RTags Raw* buffer (so libxml parsing doesn't fail)"
-  (goto-char (point-min))
-  (if (search-forward-regexp "\\`\n+\\|^\\s-+\\|\\s-+$\\|\n+\\'" (point-max) t)
-      (replace-match "" t t)))
+;; (defun rtags-trim-whitespace ()
+;;   "Trim initial whitespace from the *RTags Raw* buffer (so libxml parsing doesn't fail)"
+;;   (goto-char (point-min))
+;;   (if (search-forward-regexp "\\`\n+\\|^\\s-+\\|\\s-+$\\|\n+\\'" (point-max) t)
+;;       (replace-match "" t t)))
 
-(defconst rtags-diagnostics-process-regx
-  (regexp-opt '("</checkstyle>"
-                "</progress>"
-                "</completions>")))
+;; (defconst rtags-diagnostics-process-regx
+;;   (regexp-opt '("</checkstyle>"
+;;                 "</progress>"
+;;                 "</completions>")))
 
 (defun rtags-diagnostics-process-filter (process output)
   ;; Collect the xml diagnostics into "*RTags Raw*" until a closing tag is found
   (with-current-buffer (get-buffer-create "*RTags Raw*")
     (goto-char (point-max))
-    (let ((matchrx rtags-diagnostics-process-regx)
-          endpos)
-      (insert output)
-      ;; only try to process xml diagnostics if we detect an end condition
-      (when (string-match (rx (or "</" "[es]>")) output)
-        (goto-char (point-min))
-        (while (search-forward-regexp matchrx (point-max) t)
-          (setq endpos (match-end 0))
-          ;; narrow to one xml result (incase multiple results come in together)
-          (narrow-to-region (point-min) endpos)
-          ;; trim any whitespace from the beginning of the region
-          ;; otherwise `libxml-parse-xml-region' might fail
-          (rtags-trim-whitespace)
-          ;; now try to parse the xml
-          (rtags-parse-diagnostics)
-          ;; this region is done - remove it and continue processing
-          (delete-region (point-min) (point-max))
-          (widen))))))
+    (insert output)
+    ;; only try to process diagnostics if we detect an end condition
+    (when (string-match "\n" output) ;; Is there a non-regex thing I can call?
+      (rtags-parse-diagnostics))))
 
 (defvar rtags-diagnostics-mode-map (make-sparse-keymap))
 (define-key rtags-diagnostics-mode-map (kbd "q") 'rtags-bury-or-delete)
