@@ -480,7 +480,7 @@ void Server::handleIndexMessage(const std::shared_ptr<IndexMessage> &message, co
 
 void Server::handleLogOutputMessage(const std::shared_ptr<LogOutputMessage> &message, const std::shared_ptr<Connection> &conn)
 {
-    std::shared_ptr<RTagsConnectionLogOutput> log(new RTagsConnectionLogOutput(conn, message->level(), message->flags()));
+    std::shared_ptr<RTagsLogOutput> log(new RTagsLogOutput(message->level(), message->flags(), conn));
     log->add();
 }
 
@@ -1511,7 +1511,7 @@ void Server::codeCompleteAt(const std::shared_ptr<QueryMessage> &query, const st
         c->finish();
         c.reset();
     }
-    error() << "Got completion" << String::format("%s:%d:%d", path.constData(), line, column);
+    error() << "Got completion" << String::format("%s:%d:%d", path.constData(), line, column) << c.get();
     mCompletionThread->completeAt(source, loc, flags, query->unsavedFiles().value(path), c);
 }
 

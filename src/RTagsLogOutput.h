@@ -23,9 +23,12 @@ along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
 class RTagsLogOutput : public LogOutput
 {
 public:
-    RTagsLogOutput(int level, unsigned int flags)
-        : LogOutput(level), mFlags(flags)
+    RTagsLogOutput(int level, unsigned int flags, const std::shared_ptr<Connection> &conn = std::shared_ptr<Connection>())
+        : LogOutput(level), mFlags(flags), mConnection(conn)
     {
+        if (conn) {
+            conn->disconnected().connect(std::bind(&RTagsLogOutput::remove, this));
+        }
     }
 
     enum Flag {
@@ -41,34 +44,21 @@ public:
             return level == logLevel();
         return LogOutput::testLog(level);
     }
-private:
-    const unsigned int mFlags;
-};
-
-class RTagsConnectionLogOutput : public RTagsLogOutput
-{
-public:
-    RTagsConnectionLogOutput(const std::shared_ptr<Connection> &conn, int level, unsigned int flags)
-        : RTagsLogOutput(level, flags), mConnection(conn)
-    {
-        conn->disconnected().connect(std::bind(&RTagsConnectionLogOutput::remove, this));
-    }
-    ~RTagsConnectionLogOutput()
-    {
-        printf("[%s:%d]: ~RTagsConnectionLogOutput()\n", __FILE__, __LINE__); fflush(stdout);
-    }
-
     virtual void log(const char *msg, int len)
     {
-        std::shared_ptr<EventLoop> main = EventLoop::mainEventLoop();
-        if (EventLoop::eventLoop() == main) {
-            mConnection->write(String(msg, len));
-        } else {
-            EventLoop::mainEventLoop()->callLaterMove(std::bind((bool(Connection::*)(Message&&))&Connection::send, mConnection, std::placeholders::_1),
-                                                      ResponseMessage(String(msg, len)));
+        if (mConnection) {
+            std::shared_ptr<EventLoop> main = EventLoop::mainEventLoop();
+            if (EventLoop::eventLoop() == main) {
+                mConnection->write(String(msg, len));
+            } else {
+                EventLoop::mainEventLoop()->callLaterMove(std::bind((bool(Connection::*)(Message&&))&Connection::send, mConnection, std::placeholders::_1),
+                                                          ResponseMessage(String(msg, len)));
+            }
         }
     }
+    std::shared_ptr<Connection> connection() const { return mConnection; }
 private:
+    const unsigned int mFlags;
     std::shared_ptr<Connection> mConnection;
 };
 
