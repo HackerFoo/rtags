@@ -1511,7 +1511,7 @@ void Server::codeCompleteAt(const std::shared_ptr<QueryMessage> &query, const st
         c->finish();
         c.reset();
     }
-    error() << "Got completion" << String::format("%s:%d:%d", path.constData(), line, column) << c.get();
+    error() << "Got completion request for" << String::format("%s:%d:%d", path.constData(), line, column);
     mCompletionThread->completeAt(source, loc, flags, query->unsavedFiles().value(path), c);
 }
 

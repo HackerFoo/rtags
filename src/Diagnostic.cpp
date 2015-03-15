@@ -78,11 +78,11 @@ String Diagnostic::format(const Diagnostics &diagnostics, Format format)
     };
     static const char *startFile[] = {
         "\n    <file name=\"%s\">",
-        "'(\"%s\""
+        "(cons \"%s\" (list"
     };
     static const char *endFile[] = {
         "\n    </file>",
-        ")"
+        "))"
     };
     static const char *trailer[] = {
         "\n  </checkstyle>",
@@ -99,7 +99,7 @@ String Diagnostic::format(const Diagnostics &diagnostics, Format format)
         };
     } else {
         formatDiagnostic = [severities](const Location &loc, const Diagnostic &diagnostic) {
-            return String::format<256>(" '(%d %d %s '%s \"%s\")",
+            return String::format<256>(" (list %d %d %s '%s \"%s\")",
                                        loc.line(), loc.column(),
                                        diagnostic.length > 0 ? String::number(diagnostic.length).constData() : "nil",
                                        severities[diagnostic.type],

@@ -401,7 +401,6 @@ struct Output
 {
     void send(const String &string)
     {
-        error() << connection.get() << string.size();
         if (connection) {
             connection->write(string);
             connection->finish();
@@ -434,12 +433,14 @@ void CompletionThread::printCompletions(const List<Completions::Candidate> &comp
         request->conn.reset();
     }
     log([&xml, &elisp, &outputs](const std::shared_ptr<LogOutput> &output) {
+            // error() << "Got a dude" << output->testLog(RTags::CompilationErrorXml);
             if (output->testLog(RTags::CompilationErrorXml)) {
                 auto out = std::static_pointer_cast<RTagsLogOutput>(output);
                 std::shared_ptr<Output> output(new Output);
                 output->output = out;
                 if (out->flags() & RTagsLogOutput::ElispList) {
                     output->xml = false;
+                    elisp = true;
                 } else {
                     output->xml = true;
                     xml = true;
@@ -447,7 +448,6 @@ void CompletionThread::printCompletions(const List<Completions::Candidate> &comp
                 outputs.append(output);
             }
         });
-
 
     if (!(request->flags & Refresh) && !outputs.isEmpty() && !completions.isEmpty()) {
         String xmlOut, elispOut;
