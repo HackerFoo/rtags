@@ -40,31 +40,33 @@ int SymbolInfoJob::execute()
         write(symbol, ciFlags);
         ret = 0;
     }
-    if (queryFlags() & QueryMessage::SymbolInfoIncludeParents) {
-        auto syms = project()->openSymbols(location.fileId());
-        if (syms) {
+    auto syms = project()->openSymbols(location.fileId());
+    if (syms) {
+        if (idx == -1) {
+            idx = syms->lowerBound(location);
             if (idx == -1) {
-                idx = syms->lowerBound(location);
-                if (idx == -1) {
-                    idx = syms->count() - 1;
-                }
+                idx = syms->count() - 1;
             }
         }
-        ciFlags |= Symbol::IgnoreTargets|Symbol::IgnoreReferences;
-        const unsigned int line = location.line();
-        const unsigned int column = location.column();
-        while (idx-- > 0) {
-            const Symbol symbol = syms->valueAt(idx);
-            if (symbol.isDefinition()
-                && symbol.isContainer()
-                && comparePosition(line, column, symbol.startLine, symbol.startColumn) >= 0
-                && comparePosition(line, column, symbol.endLine, symbol.endColumn) <= 0) {
-                ret = 0;
+    }
+    ciFlags |= Symbol::IgnoreTargets|Symbol::IgnoreReferences;
+    const unsigned int line = location.line();
+    const unsigned int column = location.column();
+    while (idx-- > 0) {
+        const Symbol symbol = syms->valueAt(idx);
+        if (symbol.isDefinition()
+            && symbol.isContainer()
+            && comparePosition(line, column, symbol.startLine, symbol.startColumn) >= 0
+            && comparePosition(line, column, symbol.endLine, symbol.endColumn) <= 0) {
+            ret = 0;
+            if (queryFlags() & QueryMessage::SymbolInfoIncludeParents) {
                 write("====================");
                 write(symbol.location);
                 write(symbol, ciFlags);
-                break;
+            } else {
+                write<256>("Container: %s", symbol.symbolName.constData());
             }
+            break;
         }
     }
     return ret;
