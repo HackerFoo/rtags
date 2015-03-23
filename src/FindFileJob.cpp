@@ -19,8 +19,16 @@ along with RTags.  If not, see <http://www.gnu.org/licenses/>. */
 #include "FileManager.h"
 #include "Project.h"
 
+static inline unsigned int jobFlags(unsigned int queryFlags)
+{
+    unsigned int ret = QueryJob::QuietJob;
+    if (queryFlags & QueryMessage::ElispList) {
+        ret |= QueryJob::QuoteOutput;
+    }
+    return ret;
+}
 FindFileJob::FindFileJob(const std::shared_ptr<QueryMessage> &query, const std::shared_ptr<Project> &project)
-    : QueryJob(query, QuietJob, project)
+    : QueryJob(query, ::jobFlags(query->flags()), project)
 {
     const String q = query->query();
     if (!q.isEmpty()) {
@@ -60,6 +68,7 @@ int FindFileJob::execute()
     String out;
     out.reserve(PATH_MAX);
     const bool absolutePath = queryFlags() & QueryMessage::AbsolutePath;
+    const bool elisp = queryFlags() & QueryMessage::ElispList;
     if (absolutePath)
         out.append(srcRoot);
     const Files& dirs = proj->files();
@@ -71,6 +80,7 @@ int FindFileJob::execute()
     List<String> matches;
     const bool preferExact = queryFlags() & QueryMessage::FindFilePreferExact;
     int ret = 1;
+    bool first = true;
     while (dirit != dirs.end()) {
         const Path &dir = dirit->first;
         if (dir.size() < srcRoot.size()) {
@@ -126,8 +136,19 @@ int FindFileJob::execute()
                     matched.resolve();
                 if (preferExact && !foundExact) {
                     matches.append(matched);
-                } else if (!write(matched)) {
-                    return 1; // ???
+                } else if (elisp) {
+                    if (first) {
+                        first = true;
+                    }
+
+                    if (first && elisp) {
+                        first = false;
+                        if (!write("(list ", DontQuote))
+                            return 1;
+                    }
+                    if (!write(matched)) {
+                        return 1; // ???
+                    }
                 }
             }
             out.chop(key.size());
@@ -135,10 +156,19 @@ int FindFileJob::execute()
         out.chop(dir.size() - srcRoot.size());
         ++dirit;
     }
-    for (List<String>::const_iterator it = matches.begin(); it != matches.end(); ++it) {
-        if (!write(*it)) {
-            ret = 2;
-            break;
+    if (elisp && !first) {
+        write(")", DontQuote);
+    }
+    if (!matches.isEmpty()) {
+        if (elisp)
+            write("(list", DontQuote);
+        for (List<String>::const_iterator it = matches.begin(); it != matches.end(); ++it) {
+            if (!write(*it)) {
+                return 1;
+            }
+        }
+        if (elisp) {
+            write(")", DontQuote);
         }
     }
     return ret;
