@@ -728,7 +728,7 @@ return t if rtags is allowed to modify this file"
 
 (defun rtags-current-location (&optional offset)
   (let ((fn (buffer-file-name)))
-    (and fn (format "%s:%d:%d" fn (line-number-at-pos offset) (1+ (- (or offset (point)) (point-at-bol)))))))
+    (and fn (format "%s:%d:%d:" fn (line-number-at-pos offset) (1+ (- (or offset (point)) (point-at-bol)))))))
 
 (defun rtags-log (log)
   (if rtags-rc-log-enabled
@@ -1283,7 +1283,7 @@ References to references will be treated as references to the referenced symbol"
                              (goto-char (point-min))
                              (if (looking-at "Can't seem to connect to server")
                                  (and (message "RTags: rdm doesn't seem to be running") nil)
-                             ;; (message "%d-%d (%s)" (point-min) (point-max) (buffer-substring-no-properties (point-min) (point-max)))
+                               ;; (message "%d-%d (%s)" (point-min) (point-max) (buffer-substring-no-properties (point-min) (point-max)))
                                (eval (read (current-buffer)))))))))
           (cond ((eq (car data) 'checkstyle)
                  (rtags-parse-check-style (cdr data)))
@@ -1293,10 +1293,10 @@ References to references will be treated as references to the referenced symbol"
                 ((eq (car data) 'completions)
                  (setq rtags-last-completions (cadr data)))
                 (t))
+          (run-hooks 'rtags-diagnostics-hook)
           (forward-char 1)
           (delete-region (point-min) (point))
-          (goto-char (point-min))))))
-  (run-hooks 'rtags-diagnostics-hook))
+          (goto-char (point-min)))))))
 
 (defun rtags-check-overlay (overlay)
   (if (and (not (active-minibuffer-window)) (not cursor-in-echo-area))
@@ -2228,12 +2228,13 @@ BUFFER : the buffer to be checked and reparsed, if it's nil, use current buffer"
 ;;;###autoload
 (defun rtags-update-completions (&optional force)
   (interactive)
-  (when (or (eq major-mode 'c++-mode) (eq major-mode 'c-mode) (eq major-mode 'objc-mode))
+  (when (and (or (eq major-mode 'c++-mode) (eq major-mode 'c-mode) (eq major-mode 'objc-mode))
+             (rtags-has-diagnostics))
     (let ((pos (rtags-calculate-completion-point)))
-      (message "CHECKING UPDATE COMPLETIONS %d %d"
-               (or pos -1)
-               (or (cdr rtags-last-completion-position) -1))
-      (when (or force pos)
+      ;; (message "CHECKING UPDATE COMPLETIONS %d %d"
+      ;;          (or pos -1)
+      ;;          (or (cdr rtags-last-completion-position) -1))
+      (when pos
         (if (or force
                 (not (cdr rtags-last-completion-position))
                 (not (= pos (cdr rtags-last-completion-position)))

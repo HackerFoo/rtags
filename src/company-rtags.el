@@ -80,9 +80,32 @@ and `c-electric-colon', for automatic completion right after \">\" and
      ((string-match "\\((.*)\\)" meta)
       (match-string 1 meta)))))
 
+(defvar rtags-company-last-completion-point nil)
+(defvar rtags-company-last-completion-callback nil)
+(defvar rtags-company-last-completion-prefix nil)
+(defun rtags-company-update-completions (cb)
+  (setq rtags-company-last-completion-point (rtags-current-location))
+  ;; (setq rtags-company-last-completion-prefix prefix)
+  (setq rtags-company-last-completion-callback cb)
+  (rtags-update-completions)
+  (rtags-company-diagnostics-hook))
+
+(defun rtags-company-diagnostics-hook ()
+  (when (string= rtags-company-last-completion-point (car rtags-last-completions))
+    (let ((results nil)
+          (maxwidth (- (window-width) (- (point) (point-at-bol))))
+          (candidates (cdr rtags-last-completions)))
+      (while candidates
+        (when (string-prefix-p rtags-company-last-completion-prefix (caar candidates))
+          (push (company-rtags--make-candidate (car candidates) maxwidth) results))
+        (setq candidates (cdr candidates)))
+      (funcall rtags-company-last-completion-callback (reverse results)))))
+(add-hook 'rtags-diagnostics-hook 'rtags-company-diagnostics-hook)
+
 (defun company-rtags (command &optional arg &rest ignored)
   "`company-mode' completion back-end for `rtags'."
   (interactive (list 'interactive))
+  (setq rtags-company-last-completion-prefix arg)
   (case command
     (interactive (company-begin-backend 'company-rtags))
     (prefix (and (rtags-is-indexed)
@@ -90,7 +113,9 @@ and `c-electric-colon', for automatic completion right after \">\" and
                  buffer-file-name
                  (not (company-in-string-or-comment))
                  (company-rtags--prefix)))
-    (candidates (company-rtags--candidates arg))
+    (candidates (cons :async
+                      (lambda (cb)
+                        (rtags-company-update-completions cb))))
     (meta (company-rtags--meta arg))
     (sorted t)
     (annotation (company-rtags--annotation arg))
